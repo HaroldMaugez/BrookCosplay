@@ -1,0 +1,7 @@
+# Dépendances Python.
+# Sur Raspberry Pi OS, les paquets système suffisent souvent :
+#   sudo apt install python3-evdev python3-pygame
+# Le script install.sh essaie d'abord apt, puis pip.
+
+evdev>=1.6.0
+pygame>=2.1.0

@@ -1,0 +1,18 @@
+[Unit]
+Description=BrookCosplay - jukebox Brook piloté à la Wiimote
+After=bluetooth.target sound.target multi-user.target
+Wants=bluetooth.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__DIR__
+ExecStart=/usr/bin/python3 -u __DIR__/brook.py
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+Environment=SDL_VIDEODRIVER=dummy
+Environment=SDL_AUDIODRIVER=alsa
+
+[Install]
+WantedBy=multi-user.target
