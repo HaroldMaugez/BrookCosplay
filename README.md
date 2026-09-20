@@ -44,7 +44,7 @@ Codes de touches réellement utilisés (pilote `hid-wiimote`) :
 ```bash
 # 1. sur le Pi
 sudo apt update && sudo apt upgrade -y
-git clone https://github.com/TOI/BrookCosplay.git
+git clone https://github.com/HaroldMaugez/BrookCosplay.git
 cd BrookCosplay
 
 # 2. dépendances (paquets système, sinon pip)
