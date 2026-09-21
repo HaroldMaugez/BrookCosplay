@@ -34,6 +34,18 @@ def choose_device():
     for i, dev in enumerate(devices):
         print("  %d. %-40s %s" % (i, dev.name, dev.path))
 
+    # Une manette Nintendo ? on la prend directement.
+    nintendo = [d for d in devices
+                if any(h in d.name.lower()
+                       for h in ("nintendo", "wii", "wiimote", "rvl"))]
+    if len(nintendo) == 1:
+        print("\n-> %s sélectionné automatiquement" % nintendo[0].name)
+        return nintendo[0]
+    if not nintendo:
+        print("\n/!\\ Aucune manette Nintendo dans la liste.")
+        print("   Elle n'est probablement pas connectée : appuie sur un bouton")
+        print("   puis relance  bluetoothctl connect <MAC>")
+
     if len(devices) == 1:
         return devices[0]
 

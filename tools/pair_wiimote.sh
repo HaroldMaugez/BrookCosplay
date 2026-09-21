@@ -134,8 +134,15 @@ good "  manette trouvée : $MAC"
 
 # ------------------------------------------------------------- appairage
 bold "3/5  Appairage"
-bt "pair $MAC" 12
+# On repart d'une page blanche : un vieil appairage à moitié fait est la
+# première cause de "br-connection-create-socket".
+if bluetoothctl -- devices 2>/dev/null | grep -qi "$MAC"; then
+    echo "  ancien appairage trouvé -> on le supprime"
+    bt "remove $MAC" 2
+fi
+# L'ordre qui marche le plus souvent sur BlueZ récent : trust, puis pair.
 bt "trust $MAC" 2
+bt "pair $MAC" 12
 
 if grep -q "Failed to pair\|AuthenticationFailed\|org.bluez.Error" "$LOG"; then
     bad "L'appairage a échoué. Deuxième essai, rappuie sur 1 + 2 juste avant."
@@ -147,7 +154,12 @@ if grep -q "Failed to pair\|AuthenticationFailed\|org.bluez.Error" "$LOG"; then
 fi
 
 if ! bluetoothctl -- info "$MAC" 2>/dev/null | grep -q "Paired: yes"; then
-    bad "Toujours pas appairé. Journal bluetoothctl :"
+    bad "Toujours pas appairé."
+    echo "  * Piles ? appuie sur un bouton : 4 LED = plein, 1 LED = à sec."
+    echo "  * Refais un appui sur 1 + 2 JUSTE avant, elle n'émet que ~20 s."
+    echo "  * Diagnostic : sudo btmon | grep -iE 'page timeout|host is down'"
+    echo
+    echo "Journal bluetoothctl :"
     tail -25 "$LOG" | sed 's/^/  /'
     echo
     echo "Si bluetoothctl réclame un code PIN : c'est une vieille manette."
@@ -160,22 +172,25 @@ good "  appairée et de confiance (trusted)"
 # ------------------------------------------------------------- connexion
 bold "4/5  Connexion"
 for essai in 1 2 3; do
+    echo "  ==> appuie sur un bouton de la manette pour la réveiller"
+    sleep 2
     bt "connect $MAC" 6
     if bluetoothctl -- info "$MAC" 2>/dev/null | grep -q "Connected: yes"; then
         break
     fi
     echo "  essai $essai raté, on réessaie..."
+    sudo modprobe hid-wiimote >/dev/null 2>&1 || true
+    sudo modprobe uhid >/dev/null 2>&1 || true
 done
 
 if ! bluetoothctl -- info "$MAC" 2>/dev/null | grep -q "Connected: yes"; then
-    bad "Connecté mais pas de profil HID."
-    echo "Cas classique sur BlueZ récent : ajoute dans /etc/bluetooth/main.conf"
-    echo
-    echo "  [General]"
-    echo "  Privacy=off"
-    echo "  ClassicBondedOnly=false"
-    echo
-    echo "puis : sudo systemctl restart bluetooth && bluetoothctl connect $MAC"
+    bad "Pas de connexion (br-connection-create-socket le plus souvent)."
+    echo "  Ça veut dire 'la manette ne répond pas à l'appel' (page timeout)."
+    echo "  * Piles : appuie sur un bouton -> 4 LED = plein, 1 LED = à sec."
+    echo "  * Elle doit être RÉVEILLÉE pile au moment du connect : appuie sur"
+    echo "    un bouton, puis relance : bluetoothctl connect $MAC"
+    echo "  * Trace utile : sudo btmon | grep -iE 'page timeout|host is down'"
+    echo "  * Pilote noyau : sudo modprobe hid-wiimote uhid ; dmesg | grep -i wii"
     exit 1
 fi
 good "  connectée"
