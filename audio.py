@@ -10,8 +10,10 @@ Trois "couches" indépendantes (3 canaux pygame) :
 
 import logging
 import os
+import re
 
 # Pas d'écran sur un Pi Lite : on le dit à SDL avant d'importer pygame.
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "alsa")
 
@@ -20,11 +22,40 @@ import pygame  # noqa: E402  (import après les réglages d'environnement)
 log = logging.getLogger("brook.audio")
 
 
+class AudioError(Exception):
+    pass
+
+
+# Liste des cartes son du système ("/proc/asound/cards"). Surchargeable dans
+# les tests.
+CARDS_PATH = "/proc/asound/cards"
+
+
+def _alsa_card_ids():
+    """Noms ALSA des cartes, jack/HDMI exclus en premier.
+
+    Après un reboot l'ordre des cartes peut changer (le jack passe de card 0 à
+    card 1...), donc on s'adresse aux cartes par leur NOM et on laisse les
+    cartes HDMI pour la fin : un écran éteint = pas de son.
+    """
+    ids = []
+    try:
+        with open(CARDS_PATH) as handle:
+            for line in handle:
+                match = re.match(r"\s*\d+\s+\[(\S+?)\s*\]", line)
+                if match:
+                    ids.append(match.group(1))
+    except OSError:
+        return []
+    #sort stable : les non-HDMI remontent en tête
+    ids.sort(key=lambda name: "hdmi" in name.lower())
+    return ids
+
+
 class Audio:
     def __init__(self, cfg):
         self.cfg = cfg
-
-        pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=1024)
+        self._init_mixer()
         pygame.mixer.set_num_channels(3)
 
         self.violin_ch = pygame.mixer.Channel(0)
@@ -48,6 +79,74 @@ class Audio:
         log.info("Bink's : %s", self.binks_file or "AUCUN FICHIER TROUVÉ")
         log.info("Yohoho : %s", self.yohoho_file or "AUCUN FICHIER TROUVÉ")
         log.info("%d chanson(s) dans %s", len(self.songs), cfg.SONGS_DIR)
+
+    # ------------------------------------------------------ init de la carte
+    def _init_mixer(self):
+        """Ouvre la carte son en essayant plusieurs réglages.
+
+        Certaines cartes (HDMI du Pi, vieux chipsets) refusent 44100 Hz ou la
+        stéréo : on retente en 48000, en mono, sur un autre driver, et sur le
+        périphérique demandé dans config.AUDIO_DEVICE.
+        """
+        # Sur Raspberry Pi OS Lite, "default" échoue souvent (-524) alors que
+        # sysdefault / plughw marchent. Et comme l'ordre des cartes change
+        # d'un reboot à l'autre, on les nomme explicitement, HDMI en dernier.
+        device_list = [self.cfg.AUDIO_DEVICE]
+        for card in _alsa_card_ids():
+            device_list += ["sysdefault:CARD=%s" % card,
+                            "plughw:CARD=%s,DEV=0" % card]
+        device_list += list(getattr(self.cfg, "FALLBACK_DEVICES", []))
+        device_list += [None]
+        devices = list(dict.fromkeys(device_list))
+        log.debug("Périphériques à essayer : %s", devices)
+        drivers = ["alsa", "pulse", ""]
+        formats = [
+            dict(frequency=self.cfg.SAMPLE_RATE, size=-16, channels=2,
+                 buffer=self.cfg.BUFFER),
+            dict(frequency=48000, size=-16, channels=2, buffer=2048),
+            dict(frequency=44100, size=-16, channels=1, buffer=2048),
+            dict(),                       # on laisse pygame choisir
+        ]
+        tried = []
+        for drv in drivers:
+            if drv:
+                os.environ["SDL_AUDIODRIVER"] = drv
+            else:
+                os.environ.pop("SDL_AUDIODRIVER", None)
+            for device in devices:
+                for fmt in formats:
+                    kw = dict(fmt)
+                    if device:
+                        kw["devicename"] = device
+                    try:
+                        pygame.mixer.init(**kw)
+                        log.info("Carte son ouverte : driver=%s device=%s %s",
+                                 drv or "auto", device or "default", kw)
+                        return
+                    except Exception as exc:
+                        tried.append("%s / %s / %s -> %s"
+                                     % (drv or "auto", device or "default",
+                                        kw, exc))
+                        try:
+                            pygame.mixer.quit()
+                        except Exception:
+                            pass
+
+        detail = "\n  ".join(tried[:8])
+        raise AudioError(
+            "Impossible d'ouvrir la carte son (ALSA).\n"
+            "  Tentatives :\n  %s\n\n"
+            "  À essayer dans l'ordre :\n"
+            "    1) aplay -l                     -> quelle carte est dispo ?\n"
+            "    2) sudo raspi-config            -> System Options > Audio >\n"
+            "                                       Headphones (jack 3.5 mm)\n"
+            "    3) speaker-test -c2 -t wav      -> tu dois entendre du bruit\n"
+            "    4) un autre programme garde peut-être la carte :\n"
+            "         sudo systemctl stop brook ; fuser -v /dev/snd/*\n"
+            "    5) force la carte dans config.py :\n"
+            "         AUDIO_DEVICE = \"plughw:0,0\"   (vois aplay -L)\n"
+            "         SAMPLE_RATE = 48000\n" % detail
+        )
 
     # ------------------------------------------------------------- fichiers
     def _find_sound(self, prefix):
