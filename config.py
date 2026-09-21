@@ -42,6 +42,19 @@ BUTTONS = {
     "panic":     ["BTN_MODE", "KEY_HOMEPAGE", "KEY_MENU"],  # Home
 }
 
+# ------------------------------------------------------------------ carte son
+# Laisse None : pygame essaie plusieurs réglages tout seul. Si ta carte est
+# capricieuse (erreur "ALSA: Couldn't open audio device"), mets le nom exact
+# renvoyé par `aplay -L`, par exemple "plughw:0,0" ou "hw:0,0".
+AUDIO_DEVICE = None
+SAMPLE_RATE = 44100     # 48000 si ta carte refuse 44100
+BUFFER = 1024           # 2048 ou 4096 si le son craque
+
+# Noms de périphériques essayés à la suite si "default" refuse de s'ouvrir
+# (cas classique sur Raspberry Pi OS Lite : "default" renvoie l'erreur -524
+# alors que sysdefault:0 ou plughw:0,0 marchent très bien).
+FALLBACK_DEVICES = ["sysdefault:0", "plughw:0,0", "hw:0,0"]
+
 # ------------------------------------------------------------------ volume
 VOLUME_START = 0.7      # volume au démarrage (0.0 à 1.0)
 VOLUME_STEP = 0.1       # pas d'un appui sur + / -

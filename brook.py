@@ -23,7 +23,7 @@ import signal
 import sys
 
 import config as cfg
-from audio import Audio
+from audio import Audio, AudioError
 from wiimote_input import Wiimote
 
 log = logging.getLogger("brook")
@@ -117,7 +117,12 @@ def main():
     if args.volume is not None:
         cfg.VOLUME_START = max(0.0, min(1.0, args.volume))
 
-    audio = Audio(cfg)
+    try:
+        audio = Audio(cfg)
+    except AudioError as exc:
+        log.error("%s", exc)
+        return 1
+
     if not audio.songs and not any(
         (audio.violin_file, audio.binks_file, audio.yohoho_file)
     ):

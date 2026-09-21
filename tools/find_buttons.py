@@ -71,11 +71,16 @@ def main():
                 name = categorize(event).keycode
             except Exception:
                 name = ecodes.KEY.get(event.code, "?")
-            if isinstance(name, list):
-                name = "/".join(name)
+            # evdev renvoie parfois plusieurs alias : ('BTN_A', 'BTN_SOUTH')
+            if isinstance(name, (list, tuple)):
+                names = list(name)
+                name = "/".join(names)
+            else:
+                names = [name]
             label = {0: "relâché", 1: "enfoncé", 2: "répété"}.get(event.value, "?")
-            print("  %-16s code=%-5d %s" % (name, event.code, label))
-            seen[name] = event.code
+            print("  %-30s code=%-5d %s" % (name, event.code, label))
+            # le premier alias est celui à copier dans config.BUTTONS
+            seen[names[0]] = event.code
     except KeyboardInterrupt:
         pass
 
